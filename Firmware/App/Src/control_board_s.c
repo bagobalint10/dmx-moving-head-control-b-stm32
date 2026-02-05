@@ -15,6 +15,23 @@
 #include <motor_2_drive_s.h>
 #include <relay_s.h>
 
+// definitions
+
+typedef struct
+	{
+		uint8_t enter_f;
+		uint8_t mode_f;
+		uint8_t up_f;
+		uint8_t down_f;
+
+		uint8_t up_long_f;
+		uint8_t down_long_f;
+		uint8_t enter_long_f;
+
+	} button_flags;
+
+//
+
 static int dmx_adress = 0x01;
 
 // gomb valtozok
@@ -109,107 +126,75 @@ static void push_string(void)
 	}
 }
 
-
-static void menu(void)
+static void edge_detect(button_flags* btf)
 {
-	static uint32_t current_time = 0;
-	current_time = HAL_GetTick();
-	static uint32_t prev_time_long = 0;
-	static uint16_t interval_long = 1000;		// hossz� gombnyom�s ideje 
-	
-	static uint32_t prev_time_counter = 0;
-	static uint16_t interval_counter = 50;  	// gyors l�ptet�s sebess�ge (ideje)
-
-	static uint32_t prev_time_blink = 0;
-	static uint16_t interval_blink = 350;  		// A betu villog�s ideje 
-
-	static uint32_t prev_time_save = 0;
-	static uint16_t interval_save = 100;  		// ment�sn�l villog�s ideje 
-
-	static uint32_t prev_time_heat_blink = 0;
-	static uint16_t interval_heat_blink = 100;	// heat dots animacio
-
-	static uint32_t prev_time_lamp_cold = 0;
-	static uint32_t interval_lamp_cold = 300000;// kih�l�si ido 5 perc  5*60 *1000
-
-
-	static uint8_t heat_dots = 0x02;
-	static uint8_t heat_dots_dir = 0x01; 
-
-	// felfut� �l olvas�s
 	static uint8_t bt_up_tmp = 1;
 	static uint8_t bt_down_tmp = 1;
 	static uint8_t bt_enter_tmp = 1;
 	static uint8_t bt_mode_tmp = 1;
 
-	uint8_t enter_f = 0; 						// dinamikus, gomb flagek --> egy ciklus
-	uint8_t mode_f = 0;
-	uint8_t up_f = 0;
-	uint8_t down_f = 0;
-
-	uint8_t up_long_f = 0;
-	uint8_t down_long_f = 0;
-	uint8_t enter_long_f = 0;
-
-	static uint8_t save_f = 0;
-	static uint8_t save_counter = 0;
-	static uint8_t save_once = 0;
-	static uint8_t clear_once = 0;
-	static uint8_t lamp_on_f = 0;
-	
-	
-
-	//---------> eldetektalas
-
 	if(bt_up^bt_up_tmp)
 	{
-		up_f = !bt_up;
+		btf->up_f = !bt_up;
 		bt_up_tmp = bt_up;
 	}
 	if(bt_down^bt_down_tmp)
 	{
-		down_f = !bt_down;
+		btf->down_f = !bt_down;
 		bt_down_tmp = bt_down;
 	}
 	if(bt_enter^bt_enter_tmp)
 	{
-		enter_f = !bt_enter;
+		btf->enter_f = !bt_enter;
 		bt_enter_tmp = bt_enter;
 	}
 	if(bt_mode^bt_mode_tmp)
 	{
-		mode_f = !bt_mode;
+		btf->mode_f = !bt_mode;
 		bt_mode_tmp = bt_mode;
 	}
-	
-	// hosszu gombnyom�s ellen�rz�sek: enter, up, down
+}
 
-	if((bt_enter+bt_down+bt_up) == 2) 	// ha 1 gomb van csak lenyomva
-	{ 
-		if (!bt_enter)
+static void long_button_press_detect(button_flags* btf, uint32_t current_time)
+{
+	static uint32_t prev_time_long = 0;
+	static uint16_t interval_long = 1000;		// hossz� gombnyom�s ideje
+
+	if((bt_enter+bt_down+bt_up) == 2) 			// ha 1 gomb van csak lenyomva
 		{
-			if(enter_f) prev_time_long = current_time;
-			if ((uint32_t)(current_time - prev_time_long)>= interval_long) enter_long_f = 1;
+			if (!bt_enter)
+			{
+				if(btf->enter_f) prev_time_long = current_time;
+				if ((uint32_t)(current_time - prev_time_long)>= interval_long) btf->enter_long_f = 1;
+			}
+			else if (!bt_up)
+			{
+				if(btf->up_f) prev_time_long = current_time;
+				if ((uint32_t)(current_time - prev_time_long)>= interval_long) btf->up_long_f = 1;
+			}
+			else if (!bt_down)
+			{
+				if(btf->down_f) prev_time_long = current_time;
+				if ((uint32_t)(current_time - prev_time_long)>= interval_long) btf->down_long_f = 1;
+			}
 		}
-		else if (!bt_up)
+		else
 		{
-			if(up_f) prev_time_long = current_time;
-			if ((uint32_t)(current_time - prev_time_long)>= interval_long) up_long_f = 1;
+			btf->enter_long_f = 0;	 	//  gomb elengedve --> reset flag
+			btf->up_long_f = 0;
+			btf->down_long_f = 0;
 		}
-		else if (!bt_down)
-		{
-			if(down_f) prev_time_long = current_time;
-			if ((uint32_t)(current_time - prev_time_long)>= interval_long) down_long_f = 1;
-		}
-	}
-	else
-	{
-	enter_long_f = 0;	 	//  gomb elengedve --> reset flag
-	up_long_f = 0;
-	down_long_f = 0;
-	} 
-	
-	//---------> �ldetekt�l�s eddig
+}
+
+static void menu_switch(button_flags* btf, uint32_t current_time)
+{
+
+	static uint32_t prev_time_counter = 0;
+	static uint16_t interval_counter = 50;  	// gyors l�ptet�s sebess�ge (ideje)
+
+	static uint32_t prev_time_blink = 0;
+	static uint16_t interval_blink = 350;
+
 
 	switch(menu_n)
 	{
@@ -221,9 +206,9 @@ static void menu(void)
 				if(sub_menu_f)  				// SUBMENU 
 				{
 												// ENTER HOSSZAN  --> ment�s
-					if(mode_f) sub_menu_f = 0;	// MODE	 --> kil�p�s --> men�
-					if(up_f) dmx_adress++;		// UP-DOWN -->  dmx adress
-					if(down_f) dmx_adress--;
+					if(btf->mode_f) sub_menu_f = 0;	// MODE	 --> kil�p�s --> men�
+					if(btf->up_f) dmx_adress++;		// UP-DOWN -->  dmx adress
+					if(btf->down_f) dmx_adress--;
 
 					if ((uint32_t)(current_time - prev_time_blink)>= interval_blink)
 					{
@@ -231,7 +216,7 @@ static void menu(void)
 						dmx_menu_blink ^= 0x01;
 					}
 
-					if (up_long_f)
+					if (btf->up_long_f)
 					{
 						if ((uint32_t)(current_time - prev_time_counter)>= interval_counter)
 						{
@@ -239,7 +224,7 @@ static void menu(void)
 							dmx_adress++;
 						}
 					}
-					if (down_long_f)
+					if (btf->down_long_f)
 					{
 						if ((uint32_t)(current_time - prev_time_counter)>= interval_counter)
 						{
@@ -251,9 +236,9 @@ static void menu(void)
 				else							// SIMA MENU		
 				{
 												// MODE	 --> semmi
-					if(enter_f) sub_menu_f = 1;	// ENTER  --> bel�p�s --> submen�
-					if(up_f) menu_n--;			// UP-DOWN -->  menu_n
-					if(down_f) menu_n++;
+					if(btf->enter_f) sub_menu_f = 1;	// ENTER  --> bel�p�s --> submen�
+					if(btf->up_f) menu_n--;			// UP-DOWN -->  menu_n
+					if(btf->down_f) menu_n++;
 
 					dmx_menu_blink = 0;
 					
@@ -267,20 +252,21 @@ static void menu(void)
 				if(sub_menu_f)  				// SUBMENU
 				{
 												// ENTER  --> ment�s, hoszan
-					if(mode_f) sub_menu_f = 0;	// MODE	 --> kil�p�s --> men�
-					if(up_f) sub_menu_n--;		// UP-DOWN -->  sub_menu_n,
-					if(down_f) sub_menu_n++;
+					if(btf->mode_f) sub_menu_f = 0;	// MODE	 --> kil�p�s --> men�
+					if(btf->up_f) sub_menu_n--;		// UP-DOWN -->  sub_menu_n,
+					if(btf->down_f) sub_menu_n++;
 				}
 				else							// SIMA MENU
 				{				
 												// MODE	 --> semmi
-					if(enter_f) sub_menu_f = 1;	// ENTER  --> bel�p�s --> submen�
-					if(up_f) menu_n--;			// UP-DOWN -->  menu_n
-					if(down_f) menu_n++;
+					if(btf->enter_f) sub_menu_f = 1;	// ENTER  --> bel�p�s --> submen�
+					if(btf->up_f) menu_n--;			// UP-DOWN -->  menu_n
+					if(btf->down_f) menu_n++;
 				}
 				if(menu_n < 1) menu_n = 1;
 				if(menu_n > 2) menu_n = 2;
 				break;
+
 	default: break;
 	}
 
@@ -293,9 +279,19 @@ static void menu(void)
 	if(dmx_adress < 1) dmx_adress = 400;
 	if(dmx_adress > 400) dmx_adress = 1;
 
-	push_string();
+	/////////////////-----> menü eddig
 
-	//save_enter
+}
+
+static void save(uint8_t enter_long_f, uint8_t* lamp_on_f, uint32_t current_time)
+{
+
+	static uint8_t save_f = 0;
+	static uint8_t save_counter = 0;
+	static uint8_t save_once = 0;
+	static uint32_t prev_time_save = 0;
+	static uint16_t interval_save = 100;
+
 
 	if (sub_menu_f && enter_long_f)
 	{ 
@@ -308,8 +304,8 @@ static void menu(void)
 		
 		if(menu_n == 2)
 		{
-			if(sub_menu_n == 0) lamp_on_f = 1;
-			else if (sub_menu_n == 1) lamp_on_f = 0;
+			if(sub_menu_n == 0) *lamp_on_f = 1;
+			else if (sub_menu_n == 1) *lamp_on_f = 0;
 
 		}else if(menu_n == 1)
 		{
@@ -318,8 +314,10 @@ static void menu(void)
 
 			dmx_adress_pointer = (dmx_array+(dmx_adress));
 		}
-
 	}
+
+	// save animation
+
 	if (save_f && (save_counter < 10))
 	{
 
@@ -333,13 +331,25 @@ static void menu(void)
 
 	if (bt_enter)
 	{
-		//reset flags
 		save_counter = 0; 
 		save_f = 0;
 		save_once = 0;
 	}
+}
 
-	// heat animation
+static void lamp_heat(uint8_t* lamp_on_f, uint32_t current_time)
+{
+
+	static uint32_t prev_time_heat_blink = 0;
+	static uint16_t interval_heat_blink = 100;
+
+	static uint32_t prev_time_lamp_cold = 0;
+	static uint32_t interval_lamp_cold = 300000;
+
+	static uint8_t heat_dots = 0x02;
+	static uint8_t heat_dots_dir = 0x01;
+	static uint8_t clear_once = 0;
+
 
 	if(lamp_on_f && lamp_count)
 	{
@@ -399,19 +409,41 @@ static void menu(void)
 	}
 }
 
+static void menu_main(void)
+{
+	static uint32_t current_time = 0;
+	button_flags button_flags = {0};
+	static uint8_t lamp_on_f = 0;
+
+	current_time = HAL_GetTick();
+
+
+
+	edge_detect(&button_flags);
+
+	long_button_press_detect(&button_flags, current_time);
+
+	menu_switch(&button_flags, current_time);
+
+	push_string();
+
+	save(button_flags.enter_long_f, &lamp_on_f, current_time);
+
+	lamp_heat(&lamp_on_f, current_time);
+}
+
 void control_board_init(void)
 {
 	buttons_init(10);
 	set_buttons_variables(&bt_up, &bt_down, &bt_enter, &bt_mode);
 	lcd_init(4);
 	dmx_adress_pointer = (dmx_array+(dmx_adress));
-
- }
+}
 
 uint8_t control_board_main(void)
 {
 	button_read();
-	menu();
+	menu_main();
 	lcd_write_buffer(lcd_buffer,lcd_dot_buffer,lcd_enable);	
 	return menu_n;
 }
