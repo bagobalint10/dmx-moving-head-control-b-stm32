@@ -8,12 +8,12 @@
 #include <control_board_s.h>
 
 #include <buttons_s.h>
-#include <dmx_usart_s.h>
-#include <eepromh_s.h>
 #include <lcd_driver_s.h>
 #include <motor_1_drive_s.h>
 #include <motor_2_drive_s.h>
 #include <relay_s.h>
+#include <Services/Inc/dmx_usart_s.h>
+#include <Services/Inc/eepromh_s.h>
 
 // definitions
 

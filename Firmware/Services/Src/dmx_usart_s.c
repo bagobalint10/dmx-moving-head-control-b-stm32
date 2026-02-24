@@ -5,8 +5,7 @@
  *  Author: bagob
  */ 
 
-#include <dmx_usart_s.h>
-
+#include <Services/Inc/dmx_usart_s.h>
 #include "main.h"
 
 #define DMX_RESET_TIME 15

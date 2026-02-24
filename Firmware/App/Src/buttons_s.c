@@ -6,8 +6,8 @@
  */ 
 
 #include <buttons_s.h>
+#include <Services/Inc/interrupt_s.h>
 
-#include <interrupt_s.h>
 #include "stddef.h"
 
 static volatile uint8_t buttons = 0;

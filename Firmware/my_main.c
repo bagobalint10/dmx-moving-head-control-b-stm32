@@ -8,9 +8,9 @@
 #include <my_main.h>
 
 #include <control_board_s.h>
-#include <dmx_usart_s.h>
 #include <motor_1_drive_s.h>
 #include <motor_2_drive_s.h>
+#include <Services/Inc/dmx_usart_s.h>
 
 #define	PAN_CH 11
 #define	PAN_F_CH 12
